@@ -4,21 +4,18 @@ from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
-# Function to scrape LinkedIn (Basic)
+# LinkedIn Scraper
 def scrape_linkedin(job_title, location):
     job_title = job_title.replace(" ", "%20")
     location = location.replace(" ", "%20")
     url = f"https://www.linkedin.com/jobs/search?keywords={job_title}&location={location}"
     headers = {"User-Agent": "Mozilla/5.0"}
 
-    print(f"Scraping LinkedIn: {url}")  # Debugging print
-
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, "html.parser")
 
     jobs = []
-    job_cards = soup.find_all("div", class_="base-card")  # Updated LinkedIn class
-    print(f"Found {len(job_cards)} job cards on LinkedIn.")  # Debugging print
+    job_cards = soup.find_all("div", class_="base-card")
 
     for job_card in job_cards:
         title_elem = job_card.find("h3", class_="base-search-card__title")
@@ -29,93 +26,100 @@ def scrape_linkedin(job_title, location):
         if title_elem and company_elem and link_elem:
             title = title_elem.text.strip()
             company = company_elem.text.strip()
-            location = location_elem.text.strip() if location_elem else "Not specified"
+            job_location = location_elem.text.strip() if location_elem else "Not specified"
             link = link_elem["href"]
-            jobs.append({"title": title, "company": company, "location": location, "link": link, "source": "LinkedIn"})
+            jobs.append({
+                "title": title,
+                "company": company,
+                "location": job_location,
+                "link": link,
+                "source": "LinkedIn"
+            })
 
     return jobs
 
-# Function to scrape TimesJobs
-def scrape_timesjobs(job_title, location):
-    job_title = job_title.replace(" ", "%20")
-    location = location.replace(" ", "%20")
-    url = f"https://www.timesjobs.com/candidate/job-search.html?searchType=personalizedSearch&from=submit&txtKeywords={job_title}&txtLocation={location}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+# Adzuna API Scraper
+def scrape_adzuna(job_title, location):
+    APP_ID = "19c2df2a"
+    API_KEY = "9856459a9eb7e5b34fb4b0770683d028"
+    country = "in"
 
-    print(f"Scraping TimesJobs: {url}")  # Debugging print
+    url = f"https://api.adzuna.com/v1/api/jobs/{country}/search/1"
+    params = {
+        "app_id": APP_ID,
+        "app_key": API_KEY,
+        "what": job_title,
+        "where": location,
+        "results_per_page": 10,
+        "content-type": "application/json"
+    }
 
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-
+    response = requests.get(url, params=params)
     jobs = []
-    job_cards = soup.find_all("li", class_="clearfix job-bx")
-    print(f"Found {len(job_cards)} job cards on TimesJobs.")  # Debugging print
 
-    for job_card in job_cards:
-        title_elem = job_card.find("h2", class_="job-title")
-        company_elem = job_card.find("h3", class_="company-name")
-        location_elem = job_card.find("span", class_="location")
-        link_elem = job_card.find("a", href=True)
+    if response.status_code == 200:
+        data = response.json()
+        for result in data.get("results", []):
+            title = result.get("title")
+            company = result.get("company", {}).get("display_name", "N/A")
+            job_location = result.get("location", {}).get("display_name", "Remote/Not Specified")
+            link = result.get("redirect_url")
 
-        if title_elem and company_elem and link_elem:
-            title = title_elem.text.strip()
-            company = company_elem.text.strip()
-            location = location_elem.text.strip() if location_elem else "Not specified"
-            link = link_elem["href"]
-            jobs.append({"title": title, "company": company, "location": location, "link": link, "source": "TimesJobs"})
+            jobs.append({
+                "title": title,
+                "company": company,
+                "location": job_location,
+                "link": link,
+                "source": "Adzuna"
+            })
 
     return jobs
 
-# Function to scrape Glassdoor
-def scrape_glassdoor(job_title, location):
-    job_title = job_title.replace(" ", "%20")
-    location = location.replace(" ", "%20")
-    url = f"https://www.glassdoor.com/Job/jobs.htm?sc.keyword={job_title}&locT=C&locId={location}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+# JSearch API Scraper (replacing RemoteOK)
+def scrape_jsearch(job_title, location):
+    url = "https://jsearch.p.rapidapi.com/search"
+    querystring = {
+        "query": f"{job_title} in {location}",
+        "page": "1",
+        "num_pages": "1"
+    }
 
-    print(f"Scraping Glassdoor: {url}")  # Debugging print
+    headers = {
+        "X-RapidAPI-Key": "3ea05b6d4dmshe1086e619de148ep1b58b9jsn87d5a35bb710",
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com"
+    }
 
-    response = requests.get(url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-
+    response = requests.get(url, headers=headers, params=querystring)
     jobs = []
-    job_cards = soup.find_all("li", class_="react-job-listing")
-    print(f"Found {len(job_cards)} job cards on Glassdoor.")  # Debugging print
 
-    for job_card in job_cards:
-        title_elem = job_card.find("a", class_="jobLink")
-        company_elem = job_card.find("div", class_="jobEmpolyerName")
-        location_elem = job_card.find("span", class_="pr-xxsm")
-        link_elem = job_card.find("a", href=True)
-
-        if title_elem and company_elem and link_elem:
-            title = title_elem.text.strip()
-            company = company_elem.text.strip()
-            location = location_elem.text.strip() if location_elem else "Not specified"
-            link = "https://www.glassdoor.com" + link_elem["href"]
-            jobs.append({"title": title, "company": company, "location": location, "link": link, "source": "Glassdoor"})
+    if response.status_code == 200:
+        data = response.json()
+        for job in data.get("data", []):
+            jobs.append({
+                "title": job.get("job_title"),
+                "company": job.get("employer_name"),
+                "location": job.get("job_city", "Remote/Not Specified"),
+                "link": job.get("job_apply_link"),
+                "source": "JSearch"
+            })
+    else:
+        print("Error from JSearch:", response.status_code, response.text)
 
     return jobs
 
+# API route
 @app.route('/search', methods=['GET'])
 def search_jobs():
     job_title = request.args.get('title', '')
     location = request.args.get('location', '')
 
     linkedin_jobs = scrape_linkedin(job_title, location)
-    timesjobs_jobs = scrape_timesjobs(job_title, location)
-    glassdoor_jobs = scrape_glassdoor(job_title, location)
+    adzuna_jobs = scrape_adzuna(job_title, location)
+    jsearch_jobs = scrape_jsearch(job_title, location)
 
-    all_jobs = linkedin_jobs + timesjobs_jobs + glassdoor_jobs  # Combine all sources
-
-    print(f"Total Jobs Found: {len(all_jobs)}")  # Debugging print
-
+    all_jobs = linkedin_jobs + adzuna_jobs + jsearch_jobs
     return jsonify(all_jobs)
 
 if __name__ == "__main__":
     app.run(debug=True)
 
-
-
-
-# # python -m streamlit run app.py
